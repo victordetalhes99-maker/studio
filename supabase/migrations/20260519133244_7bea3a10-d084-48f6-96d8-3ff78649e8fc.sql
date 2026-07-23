@@ -1,0 +1,1 @@
+DELETE FROM public.clientes WHERE cpf='12345678909';

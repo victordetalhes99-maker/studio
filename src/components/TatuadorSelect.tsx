@@ -11,7 +11,11 @@ import { usePublicTattooArtists } from "@/lib/tattoo-artists";
 /**
  * Seleção única de tatuador responsável.
  *
- * - Consome a fonte central (`useTatuadores`) usada pelo painel admin.
+ * - Consome `usePublicTattooArtists` — lê SOMENTE `tattoo_artists` (leitura
+ *   pública liberada por RLS). Nunca usar o hook admin (`useTatuadores`)
+ *   aqui: ele também consulta `clientes`/`check_ins` para métricas internas,
+ *   tabelas que exigem sessão de admin — isso quebra a lista inteira para
+ *   qualquer visitante público, que é exatamente o público deste componente.
  * - Filtra apenas ativos.
  * - Nenhum campo livre: cliente só pode escolher da lista.
  * - Valor salvo = id estável do tatuador (o próprio nome canônico, único na fonte).

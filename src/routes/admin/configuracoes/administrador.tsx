@@ -4,7 +4,6 @@ import { SettingsSection } from "@/components/admin/settings/SettingsSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   DEFAULT_ADMIN_PROFILE,
@@ -70,7 +69,6 @@ export default function ConfigAdministradorPage() {
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Info label="E-mail autenticado" value={auth.email ?? "Sem sessao"} />
-          <Info label="User ID" value={auth.userId ?? "-"} mono />
           <Field label="Nome exibido">
             <Input
               value={current.displayName}
@@ -85,33 +83,6 @@ export default function ConfigAdministradorPage() {
               disabled={isLoading}
             />
           </Field>
-          <Field label="E-mail de suporte">
-            <Input
-              type="email"
-              value={current.supportEmail}
-              onChange={(e) => update("supportEmail", e.target.value)}
-              disabled={isLoading}
-            />
-          </Field>
-          <Field label="Avatar no branding">
-            <Input
-              value={current.avatarPath}
-              onChange={(e) => update("avatarPath", e.target.value)}
-              disabled={isLoading}
-              placeholder="avatar-admin.png"
-            />
-          </Field>
-        </div>
-
-        <div className="mt-4">
-          <Label className="text-xs font-medium text-muted-foreground">Observacoes internas</Label>
-          <Textarea
-            className="mt-1.5"
-            rows={4}
-            value={current.notes}
-            onChange={(e) => update("notes", e.target.value)}
-            disabled={isLoading}
-          />
         </div>
       </SettingsSection>
 

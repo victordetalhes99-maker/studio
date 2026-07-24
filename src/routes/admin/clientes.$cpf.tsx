@@ -30,10 +30,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
   anonymizeClient,
   deleteClientLgpd,
+  deleteClientPermanently,
   formatDateBR,
   formatDateTimeBR,
   maskCpfSafe,
@@ -47,9 +49,11 @@ export default function AdminClienteDetalhe() {
   const { cpf } = useParams<{ cpf: string }>();
   const navigate = useNavigate();
   const { data, isLoading, notFound, error, refetch } = useAdminClient(cpf);
-  const [busy, setBusy] = useState<null | "status" | "anon" | "del">(null);
+  const [busy, setBusy] = useState<null | "status" | "anon" | "del" | "harddel">(null);
   const [confirmAnon, setConfirmAnon] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [confirmHardDel, setConfirmHardDel] = useState(false);
+  const [hardDelText, setHardDelText] = useState("");
 
   const sessoesOrdenadas = useMemo(
     () => (data?.sessoes ?? []).slice().sort((a, b) => (b.data ?? "").localeCompare(a.data ?? "")),
@@ -151,6 +155,21 @@ export default function AdminClienteDetalhe() {
     }
   }
 
+  async function onHardDelete() {
+    if (!data || hardDelText !== "EXCLUIR") return;
+    setBusy("harddel");
+    try {
+      await deleteClientPermanently(data);
+      toast.success("Cliente excluido definitivamente.");
+      setConfirmHardDel(false);
+      setHardDelText("");
+      navigate("/admin/clientes");
+    } catch (e) {
+      toast.error(`Falha ao excluir: ${(e as Error).message}`);
+      setBusy(null);
+    }
+  }
+
   const dc = data.dadosCadastrais;
 
   return (
@@ -230,6 +249,15 @@ export default function AdminClienteDetalhe() {
             >
               <Trash2 className="mr-1.5 h-4 w-4" />
               Solicitar eliminacao
+            </Button>
+            <Button
+              variant="outline"
+              className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setConfirmHardDel(true)}
+              disabled={busy !== null}
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              Excluir definitivamente
             </Button>
           </div>
         </div>
@@ -460,6 +488,50 @@ export default function AdminClienteDetalhe() {
             >
               {busy === "del" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
               Registrar solicitacao
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={confirmHardDel}
+        onOpenChange={(open) => {
+          setConfirmHardDel(open);
+          if (!open) setHardDelText("");
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir cliente definitivamente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso apaga imediatamente e sem volta o cliente, a ficha, o contrato/consentimentos, a
+              assinatura no Storage, check-ins e revisoes de risco associadas a{" "}
+              <strong>{maskCpfSafe(data.cpf)}</strong>. Use isso só para cadastros de teste ou
+              feitos por engano — para um pedido real de titular de dados, use "Solicitar
+              eliminacao" em vez disso.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-1">
+            <label className="text-xs font-medium text-muted-foreground">
+              Digite EXCLUIR para confirmar
+            </label>
+            <Input
+              value={hardDelText}
+              onChange={(e) => setHardDelText(e.target.value)}
+              className="mt-1.5"
+              autoComplete="off"
+              disabled={busy === "harddel"}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy === "harddel"}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onHardDelete}
+              disabled={busy === "harddel" || hardDelText !== "EXCLUIR"}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {busy === "harddel" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Excluir definitivamente
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

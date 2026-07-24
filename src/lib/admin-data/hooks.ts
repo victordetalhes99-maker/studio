@@ -130,7 +130,7 @@ export function useIntegracoes(): AsyncState<IntegrationInfo[]> {
       try {
         const [dbRes, storageRes, destinationsRes, spreadsheetRes] = await Promise.allSettled([
           supabase.from("clientes").select("cpf", { head: true, count: "exact" }),
-          supabase.storage.getBucket("assinaturas"),
+          supabase.storage.from("assinaturas").list("", { limit: 1 }),
           supabase
             .from("backup_destinations")
             .select("kind, label, status, last_error")

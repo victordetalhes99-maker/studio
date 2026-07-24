@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { logSecure } from "@/lib/logger";
 import {
   type Anamnese,
   type Cliente,
@@ -336,6 +337,38 @@ export async function deleteClientLgpd(cpf: string): Promise<void> {
     motivo: "Solicitacao administrativa para analise de eliminacao.",
     status: "pendente",
   } as never);
+  if (error) throw error;
+}
+
+/**
+ * Exclusao DEFINITIVA e imediata — diferente de deleteClientLgpd (que so
+ * registra um pedido para analise). Usada para limpar cadastros de teste ou
+ * feitos por engano. Apaga os arquivos de assinatura no Storage primeiro
+ * (best-effort — uma falha aqui nao impede a exclusao dos dados no banco,
+ * ja que o objetivo principal e remover os dados pessoais) e depois chama a
+ * RPC que apaga cliente, contrato, check-ins e revisoes de risco.
+ */
+export async function deleteClientPermanently(client: AdminClientDetail): Promise<void> {
+  const d = onlyDigits(client.cpf);
+
+  const paths = [client.assinatura, ...(client.sessoes ?? []).map((s) => s.assinatura)].filter(
+    (p): p is string => Boolean(p) && !p.startsWith("data:"),
+  );
+  if (paths.length > 0) {
+    const { error: storageError } = await supabase.storage.from("assinaturas").remove(paths);
+    if (storageError) {
+      logSecure("warn", "falha ao remover assinaturas do storage na exclusao definitiva", {
+        message: storageError.message,
+      });
+    }
+  }
+
+  const { error } = await supabase.rpc(
+    "excluir_cliente_definitivamente" as never,
+    {
+      _cpf: d,
+    } as never,
+  );
   if (error) throw error;
 }
 

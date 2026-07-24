@@ -17,7 +17,7 @@ async function runHealthChecks(): Promise<HealthState> {
   const [dbRes, authRes, storageRes] = await Promise.allSettled([
     supabase.from("clientes").select("cpf", { count: "exact", head: true }),
     supabase.auth.getSession(),
-    supabase.storage.getBucket("assinaturas"),
+    supabase.storage.from("assinaturas").list("", { limit: 1 }),
   ]);
 
   return {

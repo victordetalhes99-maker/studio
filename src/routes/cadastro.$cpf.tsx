@@ -222,7 +222,7 @@ export default function CadastroPage() {
         criadoEm: now,
         atualizadoEm: now,
         sessoes: [{ data: now, assinatura, anamnese, tatuador: tatuadorFinal }],
-        status: isMinor ? "pendente_responsavel" : "aguardando",
+        status: isMinor ? "pendente_responsavel" : "atendido",
       };
 
       let clienteSalvo: Cliente;

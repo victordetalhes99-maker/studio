@@ -8,6 +8,16 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -49,6 +59,8 @@ export default function TatuadoresPage() {
   const [nome, setNome] = useState("");
   const [ativo, setAtivo] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<TattooArtist | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   const filtrados = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -106,12 +118,16 @@ export default function TatuadoresPage() {
   }
 
   async function removeArtist(artist: TattooArtist) {
+    setRemoving(true);
     try {
       await deleteTattooArtist(artist.id, artist.nome);
       toast.success("Tatuador removido do cadastro.");
+      setRemoveTarget(null);
       window.location.reload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Falha ao remover tatuador.");
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -228,7 +244,7 @@ export default function TatuadoresPage() {
                           {artist.status === "ativo" ? "Inativar" : "Reativar"}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => removeArtist(artist)}
+                          onClick={() => setRemoveTarget(artist)}
                           className="text-destructive"
                         >
                           Remover
@@ -290,6 +306,29 @@ export default function TatuadoresPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!removeTarget} onOpenChange={(open) => !open && setRemoveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover {removeTarget?.nome}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso apaga o tatuador do cadastro permanentemente. Só é possível remover quando não há
+              nenhum cliente ou check-in vinculado a ele — se houver, a remoção será bloqueada
+              automaticamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => removeTarget && removeArtist(removeTarget)}
+              disabled={removing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removing ? "Removendo..." : "Remover"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

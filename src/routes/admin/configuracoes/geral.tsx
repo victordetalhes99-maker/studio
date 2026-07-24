@@ -152,8 +152,11 @@ export default function ConfigGeralPage() {
 
       {!productionReady && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-200">
-          Configuracao de producao ainda incompleta: preencha dados do controlador e canal LGPD
-          antes de marcar a implantacao como concluida.
+          Configuracao juridica incompleta: preencha os dados do controlador e o canal LGPD abaixo.
+          Assim que voce salvar, esses dados passam a aparecer automaticamente no termo, na ficha e
+          no aviso LGPD mostrados para o cliente em /cadastro — sem precisar mexer em mais nada.
+          Enquanto nao forem preenchidos, o cadastro publico continua funcionando normalmente com um
+          aviso generico no lugar desses dados.
         </div>
       )}
 

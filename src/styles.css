@@ -85,6 +85,44 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 
+/*
+ * Painel admin — opção de fundo branco (Configurações > Identidade visual).
+ * Escopado em .admin-theme-light para não afetar o /cadastro público nem os
+ * documentos/PDFs, que continuam sempre no tema escuro padrão da marca.
+ * Ao trocar para branco, o texto vira escuro automaticamente (contraste),
+ * sem precisar escolher cor nenhuma manualmente.
+ */
+.admin-theme-light {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.18 0.005 270);
+  --card: oklch(0.99 0.002 270);
+  --card-foreground: oklch(0.18 0.005 270);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.005 270);
+  --primary: oklch(0.5 0.13 85);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.95 0.004 270);
+  --secondary-foreground: oklch(0.18 0.005 270);
+  --muted: oklch(0.95 0.004 270);
+  --muted-foreground: oklch(0.42 0.01 270);
+  --accent: oklch(0.5 0.13 85);
+  --accent-foreground: oklch(1 0 0);
+  --border: oklch(0.5 0.13 85 / 0.22);
+  --input: oklch(0.18 0.005 270 / 0.08);
+  --ring: oklch(0.5 0.13 85 / 0.5);
+  --gold: oklch(0.55 0.13 85);
+  --gold-soft: oklch(0.5 0.1 85);
+
+  --sidebar-background: oklch(0.985 0.002 270);
+  --sidebar-foreground: oklch(0.18 0.005 270);
+  --sidebar-primary: oklch(0.5 0.13 85);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.95 0.004 270);
+  --sidebar-accent-foreground: oklch(0.5 0.13 85);
+  --sidebar-border: oklch(0.5 0.13 85 / 0.16);
+  --sidebar-ring: oklch(0.5 0.13 85 / 0.4);
+}
+
 @layer base {
   * {
     border-color: var(--color-border);

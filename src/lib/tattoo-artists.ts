@@ -150,6 +150,56 @@ export function useTattooArtists(): AsyncState<TattooArtist[]> & { refetch: () =
   );
 }
 
+export interface PublicTattooArtist {
+  id: string;
+  nome: string;
+  iniciais: string;
+  status: "ativo" | "inativo";
+}
+
+/**
+ * Versao segura para rotas publicas (/cadastro, /recorrente): le SOMENTE
+ * public.tattoo_artists, que tem grant de SELECT para `anon`. Nunca consulta
+ * `clientes` ou `check_ins` (RLS admin-only) — usar `useTattooArtists` nessas
+ * rotas quebra a lista inteira para qualquer visitante nao autenticado, pois
+ * o Promise.all falha assim que uma das duas tabelas nega a leitura por RLS.
+ */
+export function usePublicTattooArtists(): AsyncState<PublicTattooArtist[]> {
+  const [state, setState] = useState<AsyncState<PublicTattooArtist[]>>(empty([]));
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const rows = await fetchTattooArtistRows();
+        if (!alive) return;
+        const data: PublicTattooArtist[] = rows
+          .filter((r) => r.ativo)
+          .map((r) => ({
+            id: r.id,
+            nome: r.nome,
+            iniciais: initials(r.nome),
+            status: "ativo" as const,
+          }));
+        setState({ data, isLoading: false, isEmpty: data.length === 0, error: null });
+      } catch (error) {
+        if (!alive) return;
+        setState({
+          data: [],
+          isLoading: false,
+          isEmpty: true,
+          error: error instanceof Error ? error : new Error("Falha ao carregar tatuadores"),
+        });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return state;
+}
+
 export function useActiveTattooArtistNames(): string[] {
   const { data } = useTattooArtists();
   return useMemo(

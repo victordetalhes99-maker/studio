@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Bell, ExternalLink, LogOut, Search } from "lucide-react";
+import { Bell, ExternalLink, LogOut } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -12,7 +12,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
@@ -76,32 +75,13 @@ export function AdminHeader() {
       data-admin-header
       className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border/60 bg-background/85 px-3 backdrop-blur-md sm:px-4"
     >
-      <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
+      <SidebarTrigger className="h-9 w-9 rounded-md border border-border/60 bg-background/60 text-muted-foreground hover:border-border hover:text-foreground" />
       <Separator orientation="vertical" className="mx-1 hidden h-6 sm:block" />
 
       <div className="min-w-0 flex-1">
         <h2 className="truncate text-sm font-semibold text-foreground">{page.title}</h2>
         <p className="hidden truncate text-xs text-muted-foreground sm:block">{page.description}</p>
       </div>
-
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={() => toast.info("Busca global disponível após integração de dados")}
-              className="hidden h-9 items-center gap-2 rounded-md border border-border/60 bg-background/60 px-3 text-xs text-muted-foreground transition-colors hover:border-border md:flex md:w-56 lg:w-72"
-            >
-              <Search className="h-3.5 w-3.5" />
-              <span className="flex-1 text-left">Buscar…</span>
-              <kbd className="rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px]">
-                ⌘K
-              </kbd>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Busca disponível após integração</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
 
       <span className="hidden text-xs capitalize text-muted-foreground lg:inline">{today}</span>
 

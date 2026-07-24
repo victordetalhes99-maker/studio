@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useTatuadores } from "@/lib/admin-data/hooks";
+import { usePublicTattooArtists } from "@/lib/tattoo-artists";
 
 /**
  * Seleção única de tatuador responsável.
@@ -31,8 +31,8 @@ export function TatuadorSelect({
   error?: string | null;
   id?: string;
 }) {
-  const { data, isLoading, error: loadError } = useTatuadores();
-  const ativos = data.filter((t) => t.status === "ativo");
+  const { data, isLoading, error: loadError } = usePublicTattooArtists();
+  const ativos = data;
   const selecionado = ativos.find((t) => t.nome === value) ?? null;
 
   const labelId = `${id}-label`;

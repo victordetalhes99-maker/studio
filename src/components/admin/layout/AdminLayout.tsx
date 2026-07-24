@@ -1,8 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminHeader } from "./AdminHeader";
+import { cn } from "@/lib/utils";
+import { getStoredAdminTheme, subscribeAdminTheme } from "@/lib/admin-theme";
 
 const SIDEBAR_KEY = "admin_sidebar_open";
 
@@ -11,10 +13,13 @@ export default function AdminLayout() {
     document.title = "Painel — 85 TATTOO";
   }, []);
 
+  const [theme, setTheme] = useState(getStoredAdminTheme);
+  useEffect(() => subscribeAdminTheme(setTheme), []);
+
   const defaultOpen = (() => {
-    if (typeof window === "undefined") return true;
+    if (typeof window === "undefined") return false;
     const v = localStorage.getItem(SIDEBAR_KEY);
-    return v === null ? true : v === "true";
+    return v === null ? false : v === "true";
   })();
 
   return (
@@ -28,7 +33,12 @@ export default function AdminLayout() {
         }
       }}
     >
-      <div className="admin-shell flex min-h-screen w-full">
+      <div
+        className={cn(
+          "admin-shell flex min-h-screen w-full",
+          theme === "light" && "admin-theme-light",
+        )}
+      >
         <AdminSidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <AdminHeader />

@@ -14,7 +14,7 @@ import { AnamneseForm, emptyAnamnese } from "@/components/AnamneseForm";
 import { BirthDatePicker } from "@/components/BirthDatePicker";
 import { SignaturePad } from "@/components/SignaturePad";
 import { TatuadorSelect } from "@/components/TatuadorSelect";
-import { useTatuadores } from "@/lib/admin-data/hooks";
+import { usePublicTattooArtists } from "@/lib/tattoo-artists";
 import {
   buildAnamneseText,
   buildConsentSnapshotPayload,
@@ -88,7 +88,7 @@ export default function CadastroPage() {
   const [tatuadorSelecionado, setTatuadorSelecionado] = useState("");
   const [tatuadorErro, setTatuadorErro] = useState<string | null>(null);
   const tatuadorFinal = tatuadorSelecionado.trim();
-  const { data: tatuadoresDisponiveis } = useTatuadores();
+  const { data: tatuadoresDisponiveis } = usePublicTattooArtists();
   const tatuadorAindaAtivo =
     !tatuadorFinal ||
     tatuadoresDisponiveis.some((t) => t.nome === tatuadorFinal && t.status === "ativo");

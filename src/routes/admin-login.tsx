@@ -67,16 +67,6 @@ export default function AdminLoginPage() {
     const resolvedPassword = password || domPassword;
     const cleanEmail = resolvedEmail.trim().toLowerCase();
 
-    // TEMPORARIO — remover apos confirmar a causa em producao.
-    // Nunca registra a senha, so metadados sobre ela.
-    console.log("[admin-login debug]", {
-      hasEmail: Boolean(cleanEmail),
-      hasPassword: Boolean(resolvedPassword),
-      passwordLength: resolvedPassword?.length ?? 0,
-      emailCameFromDomFallback: !email && Boolean(domEmail),
-      passwordCameFromDomFallback: !password && Boolean(domPassword),
-    });
-
     if (!cleanEmail || !resolvedPassword) {
       setError("Informe e-mail e senha.");
       return;

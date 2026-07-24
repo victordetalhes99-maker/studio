@@ -136,10 +136,13 @@ export default function BackupOverviewPage() {
       <div className="rounded-xl border border-border/60 bg-card/40 p-4 text-sm text-muted-foreground backdrop-blur-sm">
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
           <ShieldCheck className="h-3.5 w-3.5 text-[color:var(--gold)]" />
-          Execucao de backup
+          Copia de seguranca independente do sistema
         </div>
         <p className="mt-1.5 text-xs text-muted-foreground/90">
-          Gera uma copia local dos dados atuais do Supabase e baixa diretamente neste dispositivo.
+          Gera um arquivo com todos os dados do estudio (clientes, fichas, contratos e
+          configuracoes) e baixa direto neste dispositivo — fora do Supabase e fora do Cloudflare.
+          Guarde esse arquivo em local seguro: se o sistema mudar, for atualizado ou ficar fora do
+          ar, essa copia continua acessivel independente da plataforma.
         </p>
       </div>
 

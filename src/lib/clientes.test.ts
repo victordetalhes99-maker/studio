@@ -142,6 +142,41 @@ vi.mock("@/integrations/supabase/client", () => {
         row.atualizado_em = new Date().toISOString();
         return Promise.resolve({ data: null, error: null });
       }
+      if (fn === "finalizar_cadastro_cliente") {
+        const d = String(args._cpf ?? "").replace(/\D/g, "");
+        const idx = state.clientes.findIndex((c) => c.cpf === d);
+        const payload: ClienteRow = {
+          cpf: d,
+          nome_completo: args._nome_completo as string,
+          telefone: args._telefone as string,
+          email: args._email as string,
+          tatuador: args._tatuador as string,
+          dados_cadastrais: args._dados_cadastrais,
+          anamnese: args._anamnese,
+          assinatura: args._assinatura as string,
+          sessoes: args._sessoes as unknown[],
+          status: args._status as string,
+        };
+        if (idx >= 0) {
+          const existing = state.clientes[idx];
+          if (existing.status === "atendido") {
+            return Promise.resolve({
+              data: null,
+              error: {
+                message:
+                  "Cadastro ja foi processado pelo estudio e nao pode ser reenviado por aqui.",
+              },
+            });
+          }
+          state.clientes[idx] = { ...existing, ...payload };
+          return Promise.resolve({
+            data: [{ id: state.clientes[idx].cpf, criado_agora: false }],
+            error: null,
+          });
+        }
+        state.clientes.push(payload);
+        return Promise.resolve({ data: [{ id: payload.cpf, criado_agora: true }], error: null });
+      }
       return Promise.resolve({
         data: null,
         error: { message: `RPC desconhecida: ${fn}` },
@@ -286,7 +321,7 @@ describe("fluxo de check-in: novo cliente (primeiro cadastro)", () => {
     expect(state.calls.rpc).toEqual([{ fn: "checkin_get_cliente", args: { _cpf: CPF_DIGITS } }]);
   });
 
-  it("saveCliente sobe assinaturas e faz INSERT (não upsert)", async () => {
+  it("saveCliente sobe assinaturas e chama a RPC idempotente finalizar_cadastro_cliente", async () => {
     await saveCliente(fakeCliente());
 
     // Storage: assinatura principal + 1 da sessão = 2 uploads no bucket correto
@@ -295,25 +330,36 @@ describe("fluxo de check-in: novo cliente (primeiro cadastro)", () => {
     expect(uploads.every((u) => u.bucket === "assinaturas")).toBe(true);
     expect(state.storage.assinaturas.every((o) => o.contentType === "image/png")).toBe(true);
 
-    // DB: usa insert, nunca upsert/update (RLS pública só libera INSERT pra anon)
-    const dbOps = state.calls.from.filter((c) => c.table === "clientes");
-    expect(dbOps).toHaveLength(1);
-    expect(dbOps[0].op).toBe("insert");
-    expect(state.calls.from.some((c) => c.op === "upsert")).toBe(false);
-    expect(state.calls.from.some((c) => c.op === "update")).toBe(false);
+    // DB: usa a RPC idempotente (nunca insert/upsert/update direto na tabela —
+    // RLS pública não libera SELECT/UPDATE pra anon, só a RPC pode lidar com retry)
+    const rpcCalls = state.calls.rpc.filter((c) => c.fn === "finalizar_cadastro_cliente");
+    expect(rpcCalls).toHaveLength(1);
+    expect(state.calls.from.some((c) => c.table === "clientes")).toBe(false);
 
     // Payload: cpf só dígitos, status seguro, assinatura é path (não dataURL)
-    const payload = dbOps[0].payload as {
-      cpf: string;
-      status: string;
-      assinatura: string;
-      sessoes: { assinatura: string }[];
+    const args = rpcCalls[0].args as {
+      _cpf: string;
+      _status: string;
+      _assinatura: string;
+      _sessoes: { assinatura: string }[];
     };
-    expect(payload.cpf).toBe(CPF_DIGITS);
-    expect(payload.status).toBe("aguardando");
-    expect(payload.assinatura).not.toMatch(/^data:/);
-    expect(payload.assinatura.startsWith(`${CPF_DIGITS}/`)).toBe(true);
-    expect(payload.sessoes[0].assinatura.startsWith(`${CPF_DIGITS}/`)).toBe(true);
+    expect(args._cpf).toBe(CPF_DIGITS);
+    expect(args._status).toBe("aguardando");
+    expect(args._assinatura).not.toMatch(/^data:/);
+    expect(args._assinatura.startsWith(`${CPF_DIGITS}/`)).toBe(true);
+    expect(args._sessoes[0].assinatura.startsWith(`${CPF_DIGITS}/`)).toBe(true);
+  });
+
+  it("reenvio apos falha parcial nao duplica: RPC atualiza o mesmo CPF em vez de falhar", async () => {
+    await saveCliente(fakeCliente());
+    await saveCliente(fakeCliente());
+
+    // A tabela nunca recebe um segundo registro para o mesmo CPF —
+    // a RPC faz upsert internamente (nao testável aqui em nível de linha,
+    // mas confirmamos que o client nunca tenta um insert bruto que duplicaria).
+    const rpcCalls = state.calls.rpc.filter((c) => c.fn === "finalizar_cadastro_cliente");
+    expect(rpcCalls).toHaveLength(2);
+    expect(state.clientes.filter((c) => c.cpf === CPF_DIGITS)).toHaveLength(1);
   });
 
   it("marca cadastro de menor como pendente de responsavel", async () => {
@@ -322,13 +368,13 @@ describe("fluxo de check-in: novo cliente (primeiro cadastro)", () => {
 
     await saveCliente(cliente);
 
-    const payload = state.calls.from.find((c) => c.table === "clientes")?.payload as {
-      status: string;
-      dados_cadastrais: { faixaEtaria?: string; guardianValidationStatus?: string };
+    const args = state.calls.rpc.find((c) => c.fn === "finalizar_cadastro_cliente")?.args as {
+      _status: string;
+      _dados_cadastrais: { faixaEtaria?: string; guardianValidationStatus?: string };
     };
-    expect(payload.status).toBe("pendente_responsavel");
-    expect(payload.dados_cadastrais.faixaEtaria).toBe("menor");
-    expect(payload.dados_cadastrais.guardianValidationStatus).toBe("pending");
+    expect(args._status).toBe("pendente_responsavel");
+    expect(args._dados_cadastrais.faixaEtaria).toBe("menor");
+    expect(args._dados_cadastrais.guardianValidationStatus).toBe("pending");
   });
 });
 

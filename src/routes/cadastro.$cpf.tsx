@@ -14,12 +14,12 @@ import { AnamneseForm, emptyAnamnese } from "@/components/AnamneseForm";
 import { BirthDatePicker } from "@/components/BirthDatePicker";
 import { SignaturePad } from "@/components/SignaturePad";
 import { TatuadorSelect } from "@/components/TatuadorSelect";
+import { useTatuadores } from "@/lib/admin-data/hooks";
 import {
   buildAnamneseText,
   buildConsentSnapshotPayload,
   buildContractText,
   buildLgpdText,
-  DocumentConfigError,
 } from "@/lib/document-templates";
 import { createRenderContext, usePublicDocumentContext } from "@/lib/public-document-context";
 import { IMAGE_CONSENT_PURPOSES, IMAGE_CONSENT_TEXT } from "@/lib/lgpd";
@@ -28,6 +28,17 @@ import { toErrorLike } from "@/lib/errors";
 import { logSecure } from "@/lib/logger";
 
 const STEPS = ["Cadastro", "Anamnese", "Termo"];
+
+class CadastroStageError extends Error {
+  stage: "cliente" | "consentimento";
+  cause: unknown;
+  constructor(stage: "cliente" | "consentimento", cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = "CadastroStageError";
+    this.stage = stage;
+    this.cause = cause;
+  }
+}
 
 type ImageConsentState = Record<(typeof IMAGE_CONSENT_PURPOSES)[number], boolean>;
 
@@ -77,6 +88,10 @@ export default function CadastroPage() {
   const [tatuadorSelecionado, setTatuadorSelecionado] = useState("");
   const [tatuadorErro, setTatuadorErro] = useState<string | null>(null);
   const tatuadorFinal = tatuadorSelecionado.trim();
+  const { data: tatuadoresDisponiveis } = useTatuadores();
+  const tatuadorAindaAtivo =
+    !tatuadorFinal ||
+    tatuadoresDisponiveis.some((t) => t.nome === tatuadorFinal && t.status === "ativo");
 
   const {
     data: documentContext,
@@ -141,55 +156,51 @@ export default function CadastroPage() {
     ],
   );
 
-  const legalBlockingMessage =
+  const legalWarning =
     documentContext.missingRequiredFields.length > 0
-      ? `Configuracao juridica incompleta: ${documentContext.missingRequiredFields.join(", ")}.`
+      ? `Aviso administrativo: configuracao juridica incompleta (${documentContext.missingRequiredFields.join(", ")}). O termo foi gerado com dados institucionais provisorios e isso fica registrado no cadastro.`
       : documentContextError;
 
   const anamnesePreview = useMemo(() => {
     if (documentContextLoading) return "Carregando declaracao de riscos...";
-    if (!documentContext.legalReady) {
-      return legalBlockingMessage ?? "Configuracao juridica incompleta.";
-    }
     try {
       return buildAnamneseText(previewContext);
     } catch (error) {
       return error instanceof Error ? error.message : "Falha ao montar a declaracao.";
     }
-  }, [documentContext.legalReady, documentContextLoading, legalBlockingMessage, previewContext]);
+  }, [documentContextLoading, previewContext]);
 
   const termoPreview = useMemo(() => {
     if (documentContextLoading) return "Carregando termo atual...";
-    if (!documentContext.legalReady) {
-      return legalBlockingMessage ?? "Configuracao juridica incompleta.";
-    }
     try {
       return buildContractText(previewContext);
     } catch (error) {
       return error instanceof Error ? error.message : "Falha ao montar o termo.";
     }
-  }, [documentContext.legalReady, documentContextLoading, legalBlockingMessage, previewContext]);
+  }, [documentContextLoading, previewContext]);
 
   const lgpdPreview = useMemo(() => {
     if (documentContextLoading) return "Carregando aviso LGPD...";
-    if (!documentContext.legalReady) {
-      return legalBlockingMessage ?? "Configuracao juridica incompleta.";
-    }
     try {
       return buildLgpdText(previewContext);
     } catch (error) {
       return error instanceof Error ? error.message : "Falha ao montar o aviso LGPD.";
     }
-  }, [documentContext.legalReady, documentContextLoading, legalBlockingMessage, previewContext]);
+  }, [documentContextLoading, previewContext]);
 
   const finalizar = async () => {
-    if (!assinatura || !aceitoTermo || !aceitoLgpd || !tatuadorFinal || enviando) return;
+    if (
+      !assinatura ||
+      !aceitoTermo ||
+      !aceitoLgpd ||
+      !tatuadorFinal ||
+      !tatuadorAindaAtivo ||
+      enviando
+    )
+      return;
     setEnviando(true);
     setErroEnvio(null);
     try {
-      if (!documentContext.legalReady) {
-        throw new DocumentConfigError(documentContext.missingRequiredFields);
-      }
       const ok = await rateLimit(`cpf:${cpf}:cadastro`, 10, 3600);
       if (!ok) {
         const message = "Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente de novo.";
@@ -214,7 +225,12 @@ export default function CadastroPage() {
         status: isMinor ? "pendente_responsavel" : "aguardando",
       };
 
-      const clienteSalvo = await saveCliente(cliente);
+      let clienteSalvo: Cliente;
+      try {
+        clienteSalvo = await saveCliente(cliente);
+      } catch (err) {
+        throw new CadastroStageError("cliente", err);
+      }
       const renderContext = createRenderContext(documentContext, {
         acceptedAt: now,
         acceptanceId,
@@ -241,68 +257,85 @@ export default function CadastroPage() {
         buildConsentSnapshotPayload("anamnese", renderContext, signatureSnapshot),
       ]);
 
-      await Promise.allSettled([
-        registrarConsentimento({
-          cpf,
-          tipo: "lgpd",
-          texto: lgpdSnapshot.renderedText,
-          versao: lgpdSnapshot.templateVersion,
-          finalidade: "tratamento_dados_procedimento",
-          contexto: isMinor ? "cadastro_menor" : "cadastro_padrao",
-          consentScope: "required",
-          metadata: { acceptanceId, age: idade, minimumAgePolicy: "review_required" },
-          documentType: lgpdSnapshot.documentType,
-          templateVersion: lgpdSnapshot.templateVersion,
-          templateHash: lgpdSnapshot.templateHash,
-          renderedText: lgpdSnapshot.renderedText,
-          configSnapshot: lgpdSnapshot.configSnapshot,
-          clientSnapshot: lgpdSnapshot.clientSnapshot,
-          artistSnapshot: lgpdSnapshot.artistSnapshot,
-          acceptedAt: lgpdSnapshot.acceptedAt,
-          signatureSnapshot: lgpdSnapshot.signatureSnapshot,
-          source: lgpdSnapshot.source,
-        }),
-        registrarConsentimento({
-          cpf,
-          tipo: "termo",
-          texto: contractSnapshot.renderedText,
-          versao: contractSnapshot.templateVersion,
-          finalidade: "autorizacao_procedimento",
-          contexto: isMinor ? "cadastro_menor" : "cadastro_padrao",
-          consentScope: "required",
-          metadata: { acceptanceId },
-          documentType: contractSnapshot.documentType,
-          templateVersion: contractSnapshot.templateVersion,
-          templateHash: contractSnapshot.templateHash,
-          renderedText: contractSnapshot.renderedText,
-          configSnapshot: contractSnapshot.configSnapshot,
-          clientSnapshot: contractSnapshot.clientSnapshot,
-          artistSnapshot: contractSnapshot.artistSnapshot,
-          acceptedAt: contractSnapshot.acceptedAt,
-          signatureSnapshot: contractSnapshot.signatureSnapshot,
-          source: contractSnapshot.source,
-        }),
-        registrarConsentimento({
-          cpf,
-          tipo: "anamnese",
-          texto: anamneseSnapshot.renderedText,
-          versao: anamneseSnapshot.templateVersion,
-          finalidade: "triagem_saude",
-          contexto: isMinor ? "cadastro_menor" : "cadastro_padrao",
-          consentScope: "required",
-          metadata: { acceptanceId },
-          documentType: anamneseSnapshot.documentType,
-          templateVersion: anamneseSnapshot.templateVersion,
-          templateHash: anamneseSnapshot.templateHash,
-          renderedText: anamneseSnapshot.renderedText,
-          configSnapshot: anamneseSnapshot.configSnapshot,
-          clientSnapshot: anamneseSnapshot.clientSnapshot,
-          artistSnapshot: anamneseSnapshot.artistSnapshot,
-          acceptedAt: anamneseSnapshot.acceptedAt,
-          signatureSnapshot: anamneseSnapshot.signatureSnapshot,
-          source: anamneseSnapshot.source,
-        }),
-        ...consentSummary.map((item) =>
+      // Consentimentos obrigatorios (lgpd, termo, anamnese): TODOS precisam
+      // ser gravados com sucesso. Se algum falhar, a operacao inteira falha
+      // e nenhum sucesso e mostrado ao cliente.
+      try {
+        await Promise.all([
+          registrarConsentimento({
+            cpf,
+            tipo: "lgpd",
+            texto: lgpdSnapshot.renderedText,
+            versao: lgpdSnapshot.templateVersion,
+            finalidade: "tratamento_dados_procedimento",
+            contexto: isMinor ? "cadastro_menor" : "cadastro_padrao",
+            consentScope: "required",
+            metadata: { acceptanceId, age: idade, minimumAgePolicy: "review_required" },
+            documentType: lgpdSnapshot.documentType,
+            templateVersion: lgpdSnapshot.templateVersion,
+            templateHash: lgpdSnapshot.templateHash,
+            renderedText: lgpdSnapshot.renderedText,
+            configSnapshot: lgpdSnapshot.configSnapshot,
+            clientSnapshot: lgpdSnapshot.clientSnapshot,
+            artistSnapshot: lgpdSnapshot.artistSnapshot,
+            acceptedAt: lgpdSnapshot.acceptedAt,
+            signatureSnapshot: lgpdSnapshot.signatureSnapshot,
+            source: lgpdSnapshot.source,
+          }),
+          registrarConsentimento({
+            cpf,
+            tipo: "termo",
+            texto: contractSnapshot.renderedText,
+            versao: contractSnapshot.templateVersion,
+            finalidade: "autorizacao_procedimento",
+            contexto: isMinor ? "cadastro_menor" : "cadastro_padrao",
+            consentScope: "required",
+            metadata: {
+              acceptanceId,
+              legalConfigIncomplete: documentContext.missingRequiredFields.length > 0,
+              missingLegalFields: documentContext.missingRequiredFields,
+            },
+            documentType: contractSnapshot.documentType,
+            templateVersion: contractSnapshot.templateVersion,
+            templateHash: contractSnapshot.templateHash,
+            renderedText: contractSnapshot.renderedText,
+            configSnapshot: contractSnapshot.configSnapshot,
+            clientSnapshot: contractSnapshot.clientSnapshot,
+            artistSnapshot: contractSnapshot.artistSnapshot,
+            acceptedAt: contractSnapshot.acceptedAt,
+            signatureSnapshot: contractSnapshot.signatureSnapshot,
+            source: contractSnapshot.source,
+          }),
+          registrarConsentimento({
+            cpf,
+            tipo: "anamnese",
+            texto: anamneseSnapshot.renderedText,
+            versao: anamneseSnapshot.templateVersion,
+            finalidade: "triagem_saude",
+            contexto: isMinor ? "cadastro_menor" : "cadastro_padrao",
+            consentScope: "required",
+            metadata: { acceptanceId },
+            documentType: anamneseSnapshot.documentType,
+            templateVersion: anamneseSnapshot.templateVersion,
+            templateHash: anamneseSnapshot.templateHash,
+            renderedText: anamneseSnapshot.renderedText,
+            configSnapshot: anamneseSnapshot.configSnapshot,
+            clientSnapshot: anamneseSnapshot.clientSnapshot,
+            artistSnapshot: anamneseSnapshot.artistSnapshot,
+            acceptedAt: anamneseSnapshot.acceptedAt,
+            signatureSnapshot: anamneseSnapshot.signatureSnapshot,
+            source: anamneseSnapshot.source,
+          }),
+        ]);
+      } catch (err) {
+        throw new CadastroStageError("consentimento", err);
+      }
+
+      // Autorizacoes opcionais (imagem): melhor esforco. Uma falha aqui nao
+      // pode impedir a conclusao do cadastro, mas tambem nao pode ser
+      // silenciada — registramos um aviso tecnico se alguma falhar.
+      const imageResults = await Promise.allSettled(
+        consentSummary.map((item) =>
           registrarConsentimento({
             cpf,
             tipo: "imagem",
@@ -321,7 +354,14 @@ export default function CadastroPage() {
             source: isMinor ? "cadastro_menor" : "cadastro_padrao",
           }),
         ),
-      ]);
+      );
+      const imageFailures = imageResults.filter((r) => r.status === "rejected");
+      if (imageFailures.length > 0) {
+        logSecure("warn", "autorizacoes opcionais de imagem falharam parcialmente", {
+          failures: imageFailures.length,
+          total: imageResults.length,
+        });
+      }
 
       setFeito(true);
     } catch (error) {
@@ -331,11 +371,25 @@ export default function CadastroPage() {
         statusCode: errorLike.statusCode,
       });
       const message = errorLike.message ?? "";
-      const friendly = message.includes("Configuracao juridica incompleta")
-        ? message
-        : message.includes("storage") || message.includes("upload") || errorLike.statusCode
-          ? "Nao conseguimos enviar sua assinatura. Verifique sua conexao e toque em Reenviar - seus dados permanecem protegidos."
-          : "Nao foi possivel enviar o cadastro. Toque em Reenviar para tentar de novo.";
+      let friendly: string;
+      if (message.includes("Cadastro ja foi processado")) {
+        friendly = message;
+      } else if (error instanceof CadastroStageError && error.stage === "cliente") {
+        friendly = message.toLowerCase().includes("assinatura")
+          ? "A assinatura nao foi enviada. Tente novamente."
+          : "Nao foi possivel salvar os dados do cliente.";
+      } else if (error instanceof CadastroStageError && error.stage === "consentimento") {
+        friendly = "Nao foi possivel registrar o termo de consentimento.";
+      } else if (
+        message.includes("storage") ||
+        message.includes("upload") ||
+        errorLike.statusCode
+      ) {
+        friendly =
+          "Nao conseguimos enviar sua assinatura. Verifique sua conexao e toque em Reenviar - seus dados permanecem protegidos.";
+      } else {
+        friendly = "Nao foi possivel enviar o cadastro. Toque em Reenviar para tentar de novo.";
+      }
 
       setErroEnvio(friendly);
       toast.error(friendly, {
@@ -414,7 +468,7 @@ export default function CadastroPage() {
               termoPreview={termoPreview}
               lgpdPreview={lgpdPreview}
               loadingContext={documentContextLoading}
-              legalBlockingMessage={legalBlockingMessage}
+              legalWarning={legalWarning}
             />
           )}
 
@@ -443,14 +497,19 @@ export default function CadastroPage() {
                     setTatuadorErro("Selecione o tatuador responsavel pelo atendimento.");
                     return;
                   }
+                  if (!tatuadorAindaAtivo) {
+                    setTatuadorErro("O tatuador selecionado nao esta mais disponivel.");
+                    return;
+                  }
                   finalizar();
                 }}
                 disabled={
                   !assinatura ||
                   !aceitoTermo ||
                   !aceitoLgpd ||
+                  !tatuadorFinal ||
+                  !tatuadorAindaAtivo ||
                   enviando ||
-                  !documentContext.legalReady ||
                   documentContextLoading
                 }
                 className="btn-gold w-full sm:flex-1 px-6 py-3.5 rounded-xl uppercase tracking-[0.2em] text-sm"
@@ -680,7 +739,7 @@ function TermoStep({
   termoPreview,
   lgpdPreview,
   loadingContext,
-  legalBlockingMessage,
+  legalWarning,
 }: {
   tatuador: string;
   tatuadorSelecionado: string;
@@ -699,7 +758,7 @@ function TermoStep({
   termoPreview: string;
   lgpdPreview: string;
   loadingContext: boolean;
-  legalBlockingMessage: string | null;
+  legalWarning: string | null;
 }) {
   const labels: Record<keyof ImageConsentState, string> = {
     portfolio: "Portfolio",
@@ -722,9 +781,9 @@ function TermoStep({
         error={tatuadorErro}
       />
 
-      {legalBlockingMessage && !loadingContext && (
+      {legalWarning && !loadingContext && (
         <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">
-          {legalBlockingMessage}
+          {legalWarning}
         </div>
       )}
 

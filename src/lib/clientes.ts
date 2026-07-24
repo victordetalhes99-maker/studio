@@ -340,8 +340,25 @@ export async function saveCliente(c: Cliente): Promise<Cliente> {
     sessoesComPath.push({ ...s, assinatura: p });
   }
   const payload = clienteToInsert({ ...c, assinatura: assinaturaPath, sessoes: sessoesComPath });
-  // Cadastro é sempre criação. Anon não tem policy de UPDATE — usar insert puro.
-  const { error } = await supabase.from("clientes").insert(payload);
+  // RPC idempotente: se o cliente ja existir (ex.: reenvio apos falha numa
+  // etapa seguinte), atualiza em vez de tentar um INSERT que sempre falharia
+  // por violacao de unicidade do CPF. Nunca sobrescreve um cliente ja
+  // atendido pelo estudio (a RPC recusa nesse caso).
+  const { error } = await supabase.rpc(
+    "finalizar_cadastro_cliente" as never,
+    {
+      _cpf: payload.cpf,
+      _nome_completo: payload.nome_completo,
+      _telefone: payload.telefone,
+      _email: payload.email,
+      _tatuador: payload.tatuador,
+      _dados_cadastrais: payload.dados_cadastrais,
+      _anamnese: payload.anamnese,
+      _assinatura: payload.assinatura,
+      _sessoes: payload.sessoes,
+      _status: payload.status,
+    } as never,
+  );
   if (error) {
     logSecure("warn", "saveCliente falhou", { code: error.code, status: payload.status });
     throw error;

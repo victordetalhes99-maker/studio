@@ -281,6 +281,30 @@ export function buildMissingLegalFields(studio: StudioSettings): string[] {
     .map(([, label]) => label);
 }
 
+const GENERIC_LEGAL_FALLBACK = "Dados institucionais ainda nao cadastrados";
+
+/**
+ * Substitui campos juridicos vazios por um texto seguro e explicito, para que
+ * o documento sempre possa ser gerado. NUNCA inventa CNPJ, endereco, telefone
+ * ou qualquer outro dado legal real — apenas deixa claro, no proprio texto,
+ * que a configuracao institucional ainda nao foi preenchida pelo admin.
+ */
+export function applyLegalFallbacks(studio: StudioSettings): StudioSettings {
+  const fallback: Partial<StudioSettings> = {};
+  if (!studio.nomeEstudio?.trim()) fallback.nomeEstudio = "85 TATTOO Studio";
+  if (!studio.nomeEmpresarial?.trim()) fallback.nomeEmpresarial = GENERIC_LEGAL_FALLBACK;
+  if (!studio.documento?.trim()) fallback.documento = GENERIC_LEGAL_FALLBACK;
+  if (!studio.endereco?.trim()) fallback.endereco = GENERIC_LEGAL_FALLBACK;
+  if (!studio.telefone?.trim()) fallback.telefone = GENERIC_LEGAL_FALLBACK;
+  if (!studio.whatsapp?.trim()) fallback.whatsapp = GENERIC_LEGAL_FALLBACK;
+  if (!studio.email?.trim()) fallback.email = GENERIC_LEGAL_FALLBACK;
+  if (!studio.lgpdEmail?.trim()) fallback.lgpdEmail = GENERIC_LEGAL_FALLBACK;
+  if (!studio.privacyContactChannel?.trim())
+    fallback.privacyContactChannel = GENERIC_LEGAL_FALLBACK;
+  if (!studio.privacyResponsible?.trim()) fallback.privacyResponsible = GENERIC_LEGAL_FALLBACK;
+  return { ...studio, ...fallback };
+}
+
 function renderTokenMap(context: DocumentRenderContext) {
   const acceptedDate = new Date(context.acceptedAt);
   const cityState = [context.studio.cidade, context.studio.estado].filter(Boolean).join(" - ");
@@ -343,30 +367,23 @@ export function renderDocumentTemplate(template: string, context: DocumentRender
   });
 }
 
-function assertLegalReadiness(studio: StudioSettings) {
-  const missingFields = buildMissingLegalFields(studio);
-  if (missingFields.length > 0) {
-    throw new DocumentConfigError(missingFields);
-  }
-}
-
 export function buildContractText(context: DocumentRenderContext) {
-  assertLegalReadiness(context.studio);
-  return renderDocumentTemplate(context.documents.contractTemplateBody, context);
+  const studio = applyLegalFallbacks(context.studio);
+  return renderDocumentTemplate(context.documents.contractTemplateBody, { ...context, studio });
 }
 
 export function buildAnamneseText(context: DocumentRenderContext) {
-  assertLegalReadiness(context.studio);
-  return renderDocumentTemplate(context.documents.anamneseTemplateBody, context);
+  const studio = applyLegalFallbacks(context.studio);
+  return renderDocumentTemplate(context.documents.anamneseTemplateBody, { ...context, studio });
 }
 
 export function buildLgpdText(context: DocumentRenderContext) {
-  assertLegalReadiness(context.studio);
-  return renderDocumentTemplate(context.documents.lgpdTemplateBody, context);
+  const studio = applyLegalFallbacks(context.studio);
+  return renderDocumentTemplate(context.documents.lgpdTemplateBody, { ...context, studio });
 }
 
-export function buildPrivacyNoticeText(studio: StudioSettings, version: string) {
-  assertLegalReadiness(studio);
+export function buildPrivacyNoticeText(studioInput: StudioSettings, version: string) {
+  const studio = applyLegalFallbacks(studioInput);
   return `AVISO DE PRIVACIDADE
 Versao: ${version}
 

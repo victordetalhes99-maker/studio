@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  applyLegalFallbacks,
   buildConsentSnapshotPayload,
   buildContractText,
-  DocumentConfigError,
+  buildMissingLegalFields,
   type DocumentRenderContext,
 } from "@/lib/document-templates";
 import { DEFAULT_IDENTITY, DEFAULT_DOCUMENT_SETTINGS } from "@/lib/settings/admin-config";
@@ -83,18 +84,45 @@ describe("document-templates", () => {
     expect(text).toContain("acc-20260720-001");
   });
 
-  it("bloqueia geração quando faltam campos jurídicos obrigatórios", () => {
-    expect(() =>
-      buildContractText(
-        createContext({
-          studio: createStudio({
-            nomeEmpresarial: "",
-            documento: "",
-            lgpdEmail: "",
-          }),
+  it("applyLegalFallbacks preenche apenas os campos vazios, preservando os reais", () => {
+    const studio = createStudio({ documento: "", telefone: "" });
+    const result = applyLegalFallbacks(studio);
+    expect(result.documento).toBe("Dados institucionais ainda nao cadastrados");
+    expect(result.telefone).toBe("Dados institucionais ainda nao cadastrados");
+    // Campos ja preenchidos nao sao tocados:
+    expect(result.nomeEmpresarial).toBe("Studio Snapshot LTDA");
+    expect(result.email).toBe("contato@studiosnapshot.com");
+  });
+
+  it("applyLegalFallbacks usa nome comercial padrao quando nomeEstudio esta vazio", () => {
+    const result = applyLegalFallbacks(createStudio({ nomeEstudio: "" }));
+    expect(result.nomeEstudio).toBe("85 TATTOO Studio");
+  });
+
+  it("buildMissingLegalFields continua reportando os campos ausentes (uso administrativo)", () => {
+    const missing = buildMissingLegalFields(createStudio({ documento: "", lgpdEmail: "" }));
+    expect(missing).toContain("documento/CNPJ");
+    expect(missing).toContain("e-mail LGPD");
+    expect(missing).toHaveLength(2);
+  });
+
+  it("nunca bloqueia: usa fallback explicito quando faltam campos juridicos obrigatorios", () => {
+    const text = buildContractText(
+      createContext({
+        studio: createStudio({
+          nomeEmpresarial: "",
+          documento: "",
+          lgpdEmail: "",
         }),
-      ),
-    ).toThrowError(DocumentConfigError);
+      }),
+    );
+    // Nao lanca DocumentConfigError, e o documento e gerado mesmo assim.
+    expect(text).toContain("Dados institucionais ainda nao cadastrados");
+    // Campos preenchidos continuam usando o dado real, nao o fallback.
+    expect(text).toContain("Artista Real");
+    expect(text).toContain("Cliente Snapshot");
+    // Nunca inventa CNPJ/endereco/telefone reais no lugar do fallback.
+    expect(text).not.toContain("00.000.000/0000-00");
   });
 
   it("gera snapshot integral e permanece imutável após mudança posterior de configuração", async () => {

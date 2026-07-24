@@ -85,14 +85,11 @@ export default function RecorrentePage() {
     });
   }, [acceptanceId, cliente, cpf, documentContext, tatuadorFinal]);
 
-  const legalBlockingMessage = useMemo(() => {
+  const legalWarning = useMemo(() => {
     if (documentContextError) return documentContextError;
     if (documentContextLoading) return null;
-    if (documentContext.legalReady) return null;
-    if (documentContext.missingRequiredFields.length === 0) {
-      return "Configuração jurídica incompleta.";
-    }
-    return `Configuração jurídica incompleta. Preencha: ${documentContext.missingRequiredFields.join(", ")}.`;
+    if (documentContext.missingRequiredFields.length === 0) return null;
+    return `Aviso administrativo: configuracao juridica incompleta (${documentContext.missingRequiredFields.join(", ")}). O termo foi gerado com dados institucionais provisorios e isso fica registrado na sessao.`;
   }, [documentContext, documentContextError, documentContextLoading]);
 
   const termoPreview = useMemo(() => {
@@ -122,12 +119,6 @@ export default function RecorrentePage() {
 
   const finalizar = async () => {
     if (!assinatura || !aceito || !aceitoLgpd || !tatuadorFinal || enviando) return;
-    if (!documentContext.legalReady) {
-      const message = legalBlockingMessage ?? "Configuração jurídica incompleta.";
-      setErroEnvio(message);
-      toast.error(message);
-      return;
-    }
 
     const acceptedAt = new Date().toISOString();
     const sessao = {
@@ -270,13 +261,7 @@ export default function RecorrentePage() {
   }
 
   const submitDisabled =
-    !assinatura ||
-    !aceito ||
-    !aceitoLgpd ||
-    !tatuadorFinal ||
-    enviando ||
-    documentContextLoading ||
-    !documentContext.legalReady;
+    !assinatura || !aceito || !aceitoLgpd || !tatuadorFinal || enviando || documentContextLoading;
 
   return (
     <main className="min-h-screen px-4 py-8 sm:py-12">
@@ -339,9 +324,9 @@ export default function RecorrentePage() {
             )}
           </div>
 
-          {legalBlockingMessage && !documentContextLoading && (
+          {legalWarning && !documentContextLoading && (
             <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-200">
-              {legalBlockingMessage}
+              {legalWarning}
             </div>
           )}
 

@@ -1,46 +1,95 @@
-import { Download, FileJson, FileSpreadsheet, FileText, Lock } from "lucide-react";
+import { useState } from "react";
+import { Download, FileJson, FileSpreadsheet } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { useBackupDestinations, useBackupSettings } from "@/lib/backup/hooks";
+import { exportTableAsCsv, exportTableAsJson, runLocalBackup } from "@/lib/backup/local-export";
+import type { PublicTableName } from "@/lib/backup/export-utils";
 
-const EXPORTACOES = [
+type ExportFormat = "csv" | "json" | "full";
+
+interface ExportOption {
+  key: string;
+  label: string;
+  format: ExportFormat;
+  table?: PublicTableName;
+  icon: typeof FileJson;
+}
+
+const EXPORTACOES: ExportOption[] = [
+  { key: "completo", label: "Backup completo", format: "full", icon: FileJson },
+  { key: "clientes", label: "Clientes", format: "csv", table: "clientes", icon: FileSpreadsheet },
   {
-    key: "completo",
-    label: "Dados completos",
-    format: "ZIP criptografado",
-    icon: FileJson,
-    sensivel: true,
+    key: "tatuadores",
+    label: "Tatuadores",
+    format: "csv",
+    table: "tattoo_artists",
+    icon: FileSpreadsheet,
   },
-  { key: "clientes", label: "Clientes", format: "CSV", icon: FileSpreadsheet, sensivel: true },
-  { key: "tatuadores", label: "Tatuadores", format: "CSV", icon: FileSpreadsheet, sensivel: false },
-  { key: "fichas", label: "Fichas de anamnese", format: "JSON", icon: FileJson, sensivel: true },
-  { key: "contratos", label: "Contratos", format: "PDF + JSON", icon: FileText, sensivel: false },
-  { key: "check_ins", label: "Check-ins", format: "CSV", icon: FileSpreadsheet, sensivel: false },
-  { key: "configuracoes", label: "Configurações", format: "JSON", icon: FileJson, sensivel: false },
+  {
+    key: "check_ins",
+    label: "Check-ins",
+    format: "csv",
+    table: "check_ins",
+    icon: FileSpreadsheet,
+  },
+  {
+    key: "fichas",
+    label: "Fichas / consentimentos",
+    format: "json",
+    table: "consent_records",
+    icon: FileJson,
+  },
+  {
+    key: "risco",
+    label: "Clientes de risco",
+    format: "json",
+    table: "risk_reviews",
+    icon: FileJson,
+  },
+  {
+    key: "configuracoes",
+    label: "Configurações não sensíveis",
+    format: "json",
+    table: "app_config",
+    icon: FileJson,
+  },
 ];
 
 export default function BackupExportacaoPage() {
-  const { data: destinations } = useBackupDestinations();
-  const { data: settings } = useBackupSettings();
-  const podeExportar = destinations.some((d) => d.status === "conectado");
-  const criptografiaOk = !!settings?.encryption_enabled;
+  const [runningKey, setRunningKey] = useState<string | null>(null);
+
+  async function handleExport(option: ExportOption) {
+    setRunningKey(option.key);
+    try {
+      if (option.format === "full") {
+        const result = await runLocalBackup();
+        toast.success(`${result.filename} baixado com ${result.totalRecords} registro(s).`);
+        return;
+      }
+      if (!option.table) return;
+      if (option.format === "csv") {
+        await exportTableAsCsv(option.table);
+      } else {
+        await exportTableAsJson(option.table);
+      }
+      toast.success(`Exportação de "${option.label}" concluída.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falha ao exportar.");
+    } finally {
+      setRunningKey(null);
+    }
+  }
 
   return (
     <div className="space-y-5">
-      {!criptografiaOk && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-300/90">
-          <div className="flex items-start gap-2">
-            <Lock className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              Exportações de dados sensíveis exigem criptografia autenticada. Configure a chave em{" "}
-              <strong>Política → Criptografia</strong> antes de liberar downloads.
-            </p>
-          </div>
-        </div>
-      )}
+      <div className="rounded-xl border border-border/60 bg-card/40 p-4 text-sm text-muted-foreground backdrop-blur-sm">
+        Cada exportação lê os dados diretamente do Supabase (respeitando RLS) e baixa neste
+        dispositivo. Nenhum destino externo é necessário.
+      </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {EXPORTACOES.map((e) => {
-          const bloqueado = !podeExportar || (e.sensivel && !criptografiaOk);
+          const running = runningKey === e.key;
           return (
             <div
               key={e.key}
@@ -49,19 +98,19 @@ export default function BackupExportacaoPage() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
                   <e.icon className="h-3.5 w-3.5 text-[color:var(--gold)]" />
-                  {e.format}
+                  {e.format === "full" ? "JSON" : e.format.toUpperCase()}
                 </div>
                 <h3 className="mt-1 text-sm font-medium text-foreground">{e.label}</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {bloqueado
-                    ? e.sensivel && !criptografiaOk
-                      ? "Bloqueado: criptografia não configurada."
-                      : "Bloqueado: nenhum destino ativo."
-                    : "Gera link temporário assinado (5 min)."}
-                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Download direto.</p>
               </div>
-              <Button size="sm" variant="outline" disabled={bloqueado}>
-                <Download className="mr-1.5 h-3.5 w-3.5" /> Exportar
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={running}
+                onClick={() => handleExport(e)}
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                {running ? "Gerando..." : "Exportar"}
               </Button>
             </div>
           );

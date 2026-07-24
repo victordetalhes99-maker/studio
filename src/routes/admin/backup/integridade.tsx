@@ -4,6 +4,11 @@ import { StatusBadge } from "@/components/admin/backup/StatusBadge";
 import { useBackupJobs } from "@/lib/backup/hooks";
 import { formatBytes, formatDateTime } from "@/lib/backup/format";
 
+function manifestNumber(manifest: Record<string, unknown> | null, key: string): number | null {
+  const value = manifest?.[key];
+  return typeof value === "number" ? value : null;
+}
+
 export default function BackupIntegridadePage() {
   const { data: jobs } = useBackupJobs();
   const comHash = jobs.filter((j) => j.checksum_sha256);
@@ -16,8 +21,9 @@ export default function BackupIntegridadePage() {
           Validação de integridade
         </div>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Cada execução calcula SHA-256 no momento do envio e valida o arquivo remoto. Um backup só
-          recebe o status <em>Concluído</em> após bater tamanho e hash com o manifesto.
+          O hash SHA-256 é calculado no navegador, sobre o conteúdo exato do arquivo, antes do
+          download — via Web Crypto API. Como o arquivo é baixado localmente, ele não continua
+          disponível no servidor: guarde-o em um local seguro para poder validar o hash depois.
         </p>
       </div>
 
@@ -29,11 +35,13 @@ export default function BackupIntegridadePage() {
         />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border/50 bg-card/30 backdrop-blur-sm">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[820px] text-left text-sm">
             <thead className="border-b border-border/40 bg-background/40 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
               <tr>
                 <th className="px-4 py-2.5">Execução</th>
                 <th className="px-4 py-2.5">Tamanho</th>
+                <th className="px-4 py-2.5">Registros</th>
+                <th className="px-4 py-2.5">Tabelas</th>
                 <th className="px-4 py-2.5">SHA-256</th>
                 <th className="px-4 py-2.5">Status</th>
               </tr>
@@ -45,6 +53,12 @@ export default function BackupIntegridadePage() {
                     {formatDateTime(j.started_at)}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{formatBytes(j.size_bytes)}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {j.registros_incluidos ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {manifestNumber(j.manifest, "tables_count") ?? "—"}
+                  </td>
                   <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
                     {j.checksum_sha256}
                   </td>

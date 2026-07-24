@@ -1,132 +1,139 @@
-import { Cloud, Download, HardDrive, ShieldCheck, TestTube2 } from "lucide-react";
+import { useState } from "react";
+import { Cloud, Download, HardDrive, Info, ShieldCheck, TestTube2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/admin/feedback/EmptyState";
 import { StatusBadge } from "@/components/admin/backup/StatusBadge";
-import { useBackupDestinations } from "@/lib/backup/hooks";
-import { DESTINATION_LABELS, formatDateTime } from "@/lib/backup/format";
-import type { BackupDestination, DestinationKind } from "@/lib/backup/types";
+import { useBackupDestinations, useBackupJobs } from "@/lib/backup/hooks";
+import { formatDateTime } from "@/lib/backup/format";
+import { runLocalBackup } from "@/lib/backup/local-export";
 
-const DEFAULT_CARDS: Array<{
-  kind: DestinationKind;
-  icon: typeof Cloud;
-  description: string;
-  fields: Array<{ label: string; hint: string }>;
-}> = [
-  {
-    kind: "r2",
-    icon: Cloud,
-    description:
-      "Destino principal recomendado. Armazenamento externo com custo previsível e replicação regional.",
-    fields: [
-      { label: "Account ID", hint: "R2_ACCOUNT_ID" },
-      { label: "Access Key ID", hint: "R2_ACCESS_KEY_ID" },
-      { label: "Secret Access Key", hint: "R2_SECRET_ACCESS_KEY" },
-      { label: "Bucket", hint: "R2_BUCKET" },
-      { label: "Endpoint", hint: "R2_ENDPOINT" },
-    ],
-  },
-  {
-    kind: "google_drive",
-    icon: HardDrive,
-    description:
-      "Cópia secundária opcional. Requer OAuth e concessão explícita da conta de serviço.",
-    fields: [
-      { label: "Client ID", hint: "GOOGLE_CLIENT_ID" },
-      { label: "Client Secret", hint: "GOOGLE_CLIENT_SECRET" },
-      { label: "Refresh Token", hint: "GOOGLE_DRIVE_REFRESH_TOKEN" },
-      { label: "Pasta de destino", hint: "GOOGLE_DRIVE_FOLDER_ID" },
-    ],
-  },
-  {
-    kind: "local",
-    icon: Download,
-    description:
-      "Download manual criptografado. Uso emergencial — não substitui destinos automáticos.",
-    fields: [{ label: "Chave de criptografia", hint: "BACKUP_ENCRYPTION_KEY" }],
-  },
-];
+function LocalDestinationCard() {
+  const jobsState = useBackupJobs();
+  const [running, setRunning] = useState(false);
+  const ultimoLocal = jobsState.data.find((j) => j.destination_kind === "local");
 
-function DestinationCard({
+  async function handleRun() {
+    try {
+      setRunning(true);
+      const result = await runLocalBackup();
+      jobsState.refetch();
+      toast.success(
+        `Backup concluido. Arquivo ${result.filename} baixado com ${result.totalRecords} registro(s).`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Falha ao executar o backup local.");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5 backdrop-blur-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            <Download className="h-3.5 w-3.5 text-[color:var(--gold)]" />
+            Download local
+          </div>
+          <h3 className="mt-2 font-display text-lg text-foreground">Backup local (padrão)</h3>
+          <p className="mt-1 max-w-md text-xs text-muted-foreground">
+            Gera um arquivo JSON completo com os dados atuais e baixa direto neste dispositivo.
+            Funciona sem credenciais e sem custo.
+          </p>
+        </div>
+        <StatusBadge status="conectado" label="Disponível" />
+      </div>
+
+      <dl className="mt-4 grid grid-cols-2 gap-2">
+        <div className="rounded-lg border border-border/40 bg-background/30 p-2.5">
+          <dt className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
+            Requer credencial
+          </dt>
+          <dd className="mt-0.5 text-[11px] text-foreground">Não</dd>
+        </div>
+        <div className="rounded-lg border border-border/40 bg-background/30 p-2.5">
+          <dt className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
+            Custo externo
+          </dt>
+          <dd className="mt-0.5 text-[11px] text-foreground">Nenhum</dd>
+        </div>
+      </dl>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[11px] text-muted-foreground/80">
+          Última execução:{" "}
+          {ultimoLocal ? formatDateTime(ultimoLocal.started_at) : "Nunca executado"}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" disabled={running} onClick={handleRun}>
+            <TestTube2 className="mr-1.5 h-3.5 w-3.5" /> Testar exportação
+          </Button>
+          <Button size="sm" className="btn-gold" disabled={running} onClick={handleRun}>
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            {running ? "Executando..." : "Executar backup"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnavailableDestinationCard({
   kind,
   icon: Icon,
+  label,
   description,
-  fields,
-  existing,
 }: {
-  kind: DestinationKind;
+  kind: string;
   icon: typeof Cloud;
+  label: string;
   description: string;
-  fields: Array<{ label: string; hint: string }>;
-  existing?: BackupDestination;
 }) {
-  const status = existing?.status ?? "nao_configurado";
-  const label = existing?.label ?? DESTINATION_LABELS[kind];
-
   return (
     <div className="rounded-xl border border-border/60 bg-card/40 p-5 backdrop-blur-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             <Icon className="h-3.5 w-3.5 text-[color:var(--gold)]" />
-            {DESTINATION_LABELS[kind]}
+            {label}
           </div>
           <h3 className="mt-2 font-display text-lg text-foreground">{label}</h3>
           <p className="mt-1 max-w-md text-xs text-muted-foreground">{description}</p>
         </div>
-        <StatusBadge status={status} />
+        <StatusBadge status="nao_configurado" />
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-2">
-        {fields.map((f) => (
-          <div key={f.hint} className="rounded-lg border border-border/40 bg-background/30 p-2.5">
-            <dt className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
-              {f.label}
-            </dt>
-            <dd className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-              {(existing?.config_masked as Record<string, string> | undefined)?.[f.hint] ??
-                "•••• (segredo)"}
-            </dd>
-          </div>
-        ))}
-      </dl>
-
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[11px] text-muted-foreground/80">
-          Última validação: {formatDateTime(existing?.last_tested_at)}
-        </div>
+        <div className="text-[11px] text-muted-foreground/80">Última validação: —</div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" disabled>
             <TestTube2 className="mr-1.5 h-3.5 w-3.5" /> Testar
           </Button>
-          <Button size="sm" className="btn-gold" disabled>
-            {existing ? "Editar" : "Configurar"}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled
+            title={`Integração ${kind} não implementada`}
+          >
+            Integração não implementada
           </Button>
         </div>
       </div>
-
-      {existing?.last_error && (
-        <p className="mt-3 rounded-md border border-red-500/30 bg-red-500/5 p-2 text-[11px] text-red-400">
-          {existing.last_error}
-        </p>
-      )}
     </div>
   );
 }
 
 export default function BackupDestinosPage() {
-  const { data, isLoading, error } = useBackupDestinations();
-
-  const byKind = new Map(data.map((d) => [d.kind, d] as const));
+  const { error } = useBackupDestinations();
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-300/90">
+      <div className="rounded-xl border border-border/60 bg-card/40 p-4 text-sm text-muted-foreground backdrop-blur-sm">
         <div className="flex items-start gap-2">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--gold)]" />
           <p>
-            Credenciais nunca são digitadas nem armazenadas no navegador. O botão “Configurar”
-            abrirá um fluxo seguro no backend após a integração ser ativada. Enquanto isso, os
-            destinos permanecem como <strong>Não configurado</strong>.
+            R2 e Google Drive são destinos opcionais. O backup local funciona sem serviços externos.
           </p>
         </div>
       </div>
@@ -142,17 +149,29 @@ export default function BackupDestinosPage() {
 
       {!error && (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {DEFAULT_CARDS.map((c) => (
-            <DestinationCard key={c.kind} {...c} existing={byKind.get(c.kind)} />
-          ))}
+          <LocalDestinationCard />
+          <UnavailableDestinationCard
+            kind="Cloudflare R2"
+            icon={Cloud}
+            label="Cloudflare R2"
+            description="Destino externo opcional para redundância. Ainda não há backend configurado — nenhuma credencial é solicitada no navegador."
+          />
+          <UnavailableDestinationCard
+            kind="Google Drive"
+            icon={HardDrive}
+            label="Google Drive"
+            description="Cópia secundária opcional via OAuth. Ainda não há backend configurado — nenhuma credencial é solicitada no navegador."
+          />
         </div>
       )}
 
-      {!isLoading && !error && data.length === 0 && (
-        <p className="text-center text-xs text-muted-foreground/70">
-          Nenhum destino registrado no banco. As integrações serão ativadas em fluxo separado.
+      <div className="flex items-start gap-2 rounded-xl border border-border/50 bg-background/30 p-4 text-xs text-muted-foreground">
+        <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--gold)]" />
+        <p>
+          Credenciais nunca são digitadas nem armazenadas no navegador. R2 e Google Drive só
+          aparecerão como "Conectado" quando um backend real de integração existir.
         </p>
-      )}
+      </div>
     </div>
   );
 }

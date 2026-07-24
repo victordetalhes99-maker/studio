@@ -9,6 +9,7 @@ import {
   formatBytes,
   formatDateTime,
   formatDuration,
+  TYPE_LABELS,
 } from "@/lib/backup/format";
 
 export default function BackupDetalhePage() {
@@ -53,7 +54,7 @@ export default function BackupDetalhePage() {
           </div>
           <div className="mt-1 font-mono text-xs text-muted-foreground">{job.id}</div>
           <h2 className="mt-2 font-display text-2xl text-foreground">
-            {job.type} · {formatDateTime(job.started_at)}
+            {TYPE_LABELS[job.type] ?? job.type} · {formatDateTime(job.started_at)}
           </h2>
         </div>
         <div className="flex flex-col items-end gap-2">

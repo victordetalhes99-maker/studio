@@ -25,7 +25,7 @@ import {
   useBackupOverview,
   useBackupSettings,
 } from "@/lib/backup/hooks";
-import { executeManualBackup } from "@/lib/backup/manual";
+import { runLocalBackup } from "@/lib/backup/local-export";
 import {
   DESTINATION_LABELS,
   formatBytes,
@@ -79,18 +79,16 @@ export default function BackupOverviewPage() {
   async function handleRunBackup() {
     try {
       setRunning(true);
-      const result = await executeManualBackup();
+      const result = await runLocalBackup();
       overview.refetch();
       destinations.refetch();
       jobs.refetch();
       settings.refetch();
       toast.success(
-        result.url
-          ? `Backup concluido. Planilha atualizada com ${result.totalClientes ?? 0} cliente(s).`
-          : "Backup concluido com sucesso.",
+        `Backup concluido. Arquivo ${result.filename} baixado com ${result.totalRecords} registro(s) de ${result.tablesIncluded} tabela(s).`,
       );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha ao executar o backup manual.");
+      toast.error(error instanceof Error ? error.message : "Falha ao executar o backup local.");
     } finally {
       setRunning(false);
     }
@@ -103,48 +101,45 @@ export default function BackupOverviewPage() {
       detail: "Supabase ativo. Consultas administrativas autenticadas via RLS.",
     },
     {
-      label: "Destino de armazenamento externo",
+      label: "Exportação local",
+      done: !!ultimo,
+      detail: ultimo
+        ? `Último backup local em ${formatDateTime(ultimo.started_at)}.`
+        : 'Nenhum backup local executado ainda. Clique em "Executar backup manual".',
+      to: "/admin/backup",
+    },
+    {
+      label: "Destino externo",
       done: destinations.data.some((d) => d.status === "conectado"),
       detail:
-        destinations.data.length === 0
-          ? "Nenhum destino cadastrado. Configure Cloudflare R2 ou Google Drive."
-          : `${destinations.data.length} destino(s) cadastrado(s). Ao menos um precisa estar conectado.`,
+        "Opcional. Cloudflare R2 e Google Drive não são necessários — o backup local funciona sem eles.",
       to: "/admin/backup/destinos",
     },
     {
-      label: "Criptografia autenticada",
-      done: !!settings.data?.encryption_enabled,
-      detail: settings.data?.encryption_enabled
-        ? `Ativa (${settings.data.encryption_version ?? "versao registrada"}).`
-        : "Chave AES-GCM ainda nao configurada - necessaria para exportar dados sensiveis.",
-      to: "/admin/backup/politica",
-    },
-    {
-      label: "Agendamento automatico",
+      label: "Automação",
       done: !!settings.data?.auto_enabled,
       detail: settings.data?.auto_enabled
         ? `${settings.data.frequency} as ${String(settings.data.hour).padStart(2, "0")}:00 (${settings.data.timezone}).`
-        : "Agendamento depende da configuracao do backend.",
+        : "Nenhum agendamento automático configurado. O backup manual continua disponível a qualquer momento.",
       to: "/admin/backup/politica",
     },
     {
-      label: "Teste de restauracao",
+      label: "Teste de restauração",
       done: false,
-      detail: "Restauracao depende da configuracao do backend e da criptografia.",
+      detail: "A restauração automatizada ainda não está disponível nesta versão.",
       to: "/admin/backup/restauracao",
     },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-100/90 backdrop-blur-sm">
-        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-amber-300">
-          <ShieldCheck className="h-3.5 w-3.5" />
+      <div className="rounded-xl border border-border/60 bg-card/40 p-4 text-sm text-muted-foreground backdrop-blur-sm">
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+          <ShieldCheck className="h-3.5 w-3.5 text-[color:var(--gold)]" />
           Execucao de backup
         </div>
-        <p className="mt-1.5 text-xs text-amber-100/80">
-          O disparo manual agora usa a edge function autenticada do Supabase. Se o backend ainda nao
-          tiver credenciais externas aprovadas, a falha real sera exibida sem mascaramento.
+        <p className="mt-1.5 text-xs text-muted-foreground/90">
+          Gera uma copia local dos dados atuais do Supabase e baixa diretamente neste dispositivo.
         </p>
       </div>
 
@@ -156,9 +151,7 @@ export default function BackupOverviewPage() {
               Protecao dos dados
             </div>
             <h2 className="mt-2 font-display text-2xl text-foreground sm:text-3xl">
-              {alerts.some((a) => a.severity === "critico")
-                ? "Protecao ainda nao configurada"
-                : "Protecao operacional"}
+              {ultimo ? "Protecao local configurada" : "Protecao ainda nao configurada"}
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               Nenhum dado ficticio e exibido: destinos, execucoes e agendamento refletem exatamente
@@ -170,7 +163,7 @@ export default function BackupOverviewPage() {
               className="btn-gold"
               disabled={running}
               onClick={handleRunBackup}
-              title="Dispara a edge function autenticada de backup manual."
+              title="Gera um backup local e baixa o arquivo neste dispositivo."
             >
               <Sparkles className="mr-1.5 h-4 w-4" />
               {running ? "Executando..." : "Executar backup manual"}

@@ -139,14 +139,15 @@ export function useBackupAlerts(
 ): BackupAlert[] {
   const alerts: BackupAlert[] = [];
 
-  if (destinations.length === 0) {
+  const ultimo = overview.ultimo_backup;
+
+  if (!ultimo) {
     alerts.push({
-      id: "no-destination",
+      id: "never-backed-up",
       severity: "critico",
-      title: "Nenhum destino configurado",
-      description:
-        "Configure Cloudflare R2, Google Drive ou download local para proteger os dados do estúdio.",
-      action: { label: "Configurar destinos", to: "/admin/backup/destinos" },
+      title: "Nenhum backup local foi executado ainda",
+      description: "Gere o primeiro backup local — funciona sem serviços externos e sem custo.",
+      action: { label: "Executar backup", to: "/admin/backup" },
     });
   }
 
@@ -154,35 +155,13 @@ export function useBackupAlerts(
   if (erroDestino) {
     alerts.push({
       id: `dest-error-${erroDestino.id}`,
-      severity: "critico",
-      title: `Falha no destino ${erroDestino.label}`,
+      severity: "atencao",
+      title: `Falha no destino opcional ${erroDestino.label}`,
       description: erroDestino.last_error ?? "Última validação retornou erro.",
       action: { label: "Ver destinos", to: "/admin/backup/destinos" },
     });
   }
 
-  if (!settings?.encryption_enabled && destinations.length > 0) {
-    alerts.push({
-      id: "no-encryption",
-      severity: "atencao",
-      title: "Criptografia não configurada",
-      description:
-        "Backups sensíveis exigem criptografia autenticada. Configure a chave antes de exportar dados.",
-      action: { label: "Configurar política", to: "/admin/backup/politica" },
-    });
-  }
-
-  if (settings && !settings.auto_enabled) {
-    alerts.push({
-      id: "auto-off",
-      severity: "atencao",
-      title: "Backup automático desligado",
-      description: "Somente execuções manuais serão registradas.",
-      action: { label: "Ativar", to: "/admin/backup/politica" },
-    });
-  }
-
-  const ultimo = overview.ultimo_backup;
   if (ultimo?.started_at) {
     const diasSemBackup = Math.floor(
       (Date.now() - new Date(ultimo.started_at).getTime()) / (1000 * 60 * 60 * 24),
@@ -192,7 +171,7 @@ export function useBackupAlerts(
         id: "stale-backup",
         severity: "critico",
         title: "Último backup muito antigo",
-        description: `A última cópia foi realizada há ${diasSemBackup} dias.`,
+        description: `A última cópia local foi realizada há ${diasSemBackup} dias.`,
         action: { label: "Executar agora", to: "/admin/backup" },
       });
     }

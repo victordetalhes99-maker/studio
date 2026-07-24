@@ -1,6 +1,6 @@
 import { AlertTriangle, RotateCcw, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useBackupJobs, useBackupSettings } from "@/lib/backup/hooks";
+import { useBackupJobs } from "@/lib/backup/hooks";
 import { formatDateTime } from "@/lib/backup/format";
 
 const FLUXO = [
@@ -20,9 +20,8 @@ const FLUXO = [
 
 export default function BackupRestauracaoPage() {
   const { data: jobs } = useBackupJobs();
-  const { data: settings } = useBackupSettings();
   const compativeis = jobs.filter((j) => j.status === "completed");
-  const habilitado = compativeis.length > 0 && !!settings?.encryption_enabled;
+  const habilitado = false; // Restauração automatizada ainda não está implementada com segurança.
 
   return (
     <div className="space-y-5">
@@ -30,11 +29,13 @@ export default function BackupRestauracaoPage() {
         <div className="flex items-start gap-2">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="space-y-1">
-            <strong className="text-red-200">Ação destrutiva</strong>
+            <strong className="text-red-200">Restauração automatizada ainda não disponível</strong>
             <p>
-              Nenhuma restauração pode ser executada em um único clique. O fluxo abaixo é
-              obrigatório e sempre inclui snapshot automático do estado atual antes de qualquer
-              alteração.
+              Ainda não implementamos a restauração automática com segurança suficiente (validação
+              de escopo, snapshot prévio e auditoria completa). O fluxo abaixo documenta o desenho
+              planejado, mas nenhum botão executa uma restauração real nesta versão — para reverter
+              dados hoje, restaure manualmente a partir de um arquivo de backup local com apoio
+              técnico.
             </p>
           </div>
         </div>
@@ -43,7 +44,7 @@ export default function BackupRestauracaoPage() {
       <div className="rounded-xl border border-border/60 bg-card/40 p-5 backdrop-blur-sm">
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
           <RotateCcw className="h-3.5 w-3.5 text-[color:var(--gold)]" />
-          Fluxo protegido
+          Fluxo planejado (ainda não implementado)
         </div>
         <ol className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {FLUXO.map((f, i) => (
@@ -67,9 +68,7 @@ export default function BackupRestauracaoPage() {
               Executar restauração
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {habilitado
-                ? "Selecione uma execução concluída para iniciar o fluxo."
-                : "Restauração depende de: backup concluído + criptografia + destino validado."}
+              Restauração automatizada ainda não implementada nesta versão.
             </p>
           </div>
           <Button className="btn-gold" disabled={!habilitado}>
@@ -102,14 +101,15 @@ export default function BackupRestauracaoPage() {
         </div>
       </div>
 
-      {!settings?.encryption_enabled && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-amber-300/90">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>Restauração depende da configuração do backend e da criptografia autenticada.</p>
-          </div>
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs text-amber-300/90">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>
+            Nenhum backup listado abaixo pode ser restaurado automaticamente ainda — a lista serve
+            apenas de referência para quando a restauração for implementada.
+          </p>
         </div>
-      )}
+      </div>
     </div>
   );
 }

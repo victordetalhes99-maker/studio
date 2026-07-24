@@ -37,6 +37,14 @@ export const DESTINATION_LABELS: Record<string, string> = {
   local: "Download local",
 };
 
+export const TYPE_LABELS: Record<string, string> = {
+  completo: "Completo",
+  banco: "Banco de dados",
+  documentos: "Documentos",
+  incremental: "Incremental",
+  manual: "Manual",
+};
+
 export const STATUS_LABELS: Record<string, string> = {
   nao_configurado: "Não configurado",
   configuracao_incompleta: "Configuração incompleta",

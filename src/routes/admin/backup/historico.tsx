@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { History, Play } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { EmptyState } from "@/components/admin/feedback/EmptyState";
 import { StatusBadge } from "@/components/admin/backup/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -12,27 +12,58 @@ import {
   formatDateTime,
   formatDuration,
   STATUS_LABELS,
+  TYPE_LABELS,
 } from "@/lib/backup/format";
-import { executeManualBackup } from "@/lib/backup/manual";
+import { runLocalBackup } from "@/lib/backup/local-export";
+import type { BackupJobStatus, BackupJobType, DestinationKind } from "@/lib/backup/types";
+
+const PERIOD_OPTIONS = [
+  { value: "all", label: "Qualquer período" },
+  { value: "7", label: "Últimos 7 dias" },
+  { value: "30", label: "Últimos 30 dias" },
+  { value: "90", label: "Últimos 90 dias" },
+];
 
 export default function BackupHistoricoPage() {
   const jobsState = useBackupJobs();
   const destinationsState = useBackupDestinations();
   const [running, setRunning] = useState(false);
 
+  const [statusFilter, setStatusFilter] = useState<BackupJobStatus | "all">("all");
+  const [typeFilter, setTypeFilter] = useState<BackupJobType | "all">("all");
+  const [destinationFilter, setDestinationFilter] = useState<DestinationKind | "all">("all");
+  const [periodFilter, setPeriodFilter] = useState("all");
+  const [userFilter, setUserFilter] = useState("");
+
+  const filteredJobs = useMemo(() => {
+    const periodDays = periodFilter === "all" ? null : Number(periodFilter);
+    const cutoff = periodDays ? Date.now() - periodDays * 24 * 60 * 60 * 1000 : null;
+    return jobsState.data.filter((j) => {
+      if (statusFilter !== "all" && j.status !== statusFilter) return false;
+      if (typeFilter !== "all" && j.type !== typeFilter) return false;
+      if (destinationFilter !== "all" && j.destination_kind !== destinationFilter) return false;
+      if (cutoff && new Date(j.started_at).getTime() < cutoff) return false;
+      if (
+        userFilter.trim() &&
+        !j.criado_por?.toLowerCase().includes(userFilter.trim().toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [jobsState.data, statusFilter, typeFilter, destinationFilter, periodFilter, userFilter]);
+
   async function handleRunBackup() {
     try {
       setRunning(true);
-      const result = await executeManualBackup();
+      const result = await runLocalBackup();
       jobsState.refetch();
       destinationsState.refetch();
       toast.success(
-        result.url
-          ? `Backup concluido. Planilha atualizada com ${result.totalClientes ?? 0} cliente(s).`
-          : "Backup concluido com sucesso.",
+        `Backup concluido. Arquivo ${result.filename} baixado com ${result.totalRecords} registro(s).`,
       );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Falha ao executar o backup manual.");
+      toast.error(error instanceof Error ? error.message : "Falha ao executar o backup local.");
     } finally {
       setRunning(false);
     }
@@ -48,7 +79,7 @@ export default function BackupHistoricoPage() {
           className="btn-gold"
           disabled={running}
           onClick={handleRunBackup}
-          title="Dispara a edge function autenticada de backup manual."
+          title="Gera um backup local e baixa o arquivo neste dispositivo."
         >
           <Play className="mr-1.5 h-4 w-4" />
           {running ? "Executando..." : "Executar backup manual"}
@@ -61,6 +92,76 @@ export default function BackupHistoricoPage() {
           title="Historico indisponivel"
           description="Autentique-se como administrador para visualizar as execucoes."
         />
+      )}
+
+      {!jobsState.error && jobsState.data.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/50 bg-card/30 p-3">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as BackupJobStatus | "all")}
+            className="rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs text-foreground"
+          >
+            <option value="all">Qualquer status</option>
+            {Object.keys(STATUS_LABELS)
+              .filter((k) =>
+                [
+                  "queued",
+                  "running",
+                  "completed",
+                  "partial",
+                  "failed",
+                  "cancelado",
+                  "validando",
+                ].includes(k),
+              )
+              .map((k) => (
+                <option key={k} value={k}>
+                  {STATUS_LABELS[k]}
+                </option>
+              ))}
+          </select>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as BackupJobType | "all")}
+            className="rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs text-foreground"
+          >
+            <option value="all">Qualquer tipo</option>
+            {["completo", "banco", "documentos", "incremental", "manual"].map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <select
+            value={destinationFilter}
+            onChange={(e) => setDestinationFilter(e.target.value as DestinationKind | "all")}
+            className="rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs text-foreground"
+          >
+            <option value="all">Qualquer destino</option>
+            {Object.entries(DESTINATION_LABELS).map(([k, label]) => (
+              <option key={k} value={k}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={periodFilter}
+            onChange={(e) => setPeriodFilter(e.target.value)}
+            className="rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs text-foreground"
+          >
+            {PERIOD_OPTIONS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <input
+            value={userFilter}
+            onChange={(e) => setUserFilter(e.target.value)}
+            placeholder="Filtrar por UUID do usuário"
+            className="min-w-[180px] flex-1 rounded-lg border border-border/60 bg-background/60 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60"
+          />
+        </div>
       )}
 
       {!jobsState.error && !jobsState.isLoading && jobsState.data.length === 0 && (
@@ -97,7 +198,7 @@ export default function BackupHistoricoPage() {
                   <td className="px-4 py-3 text-muted-foreground">
                     {formatDateTime(j.started_at)}
                   </td>
-                  <td className="px-4 py-3 text-foreground">{STATUS_LABELS[j.type] ?? j.type}</td>
+                  <td className="px-4 py-3 text-foreground">{TYPE_LABELS[j.type] ?? j.type}</td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {j.destination_kind ? DESTINATION_LABELS[j.destination_kind] : "—"}
                   </td>

@@ -37,9 +37,9 @@ export default function ConfigBackupPage() {
       <div className="mt-4 rounded-lg border border-border/50 bg-background/30 p-4 text-sm text-muted-foreground">
         {overview.error || settings.error
           ? "O painel nao conseguiu validar todas as estruturas de backup neste navegador."
-          : destinos === 0
-            ? "Nenhum destino de backup configurado ainda. Cadastre pelo menos um destino antes de depender do fluxo automatico."
-            : `Ultima execucao registrada: ${ultimo ? new Date(ultimo).toLocaleString("pt-BR") : "ainda nao executado"}.`}
+          : ultimo
+            ? `Ultima execucao registrada: ${new Date(ultimo).toLocaleString("pt-BR")}.`
+            : "Nenhum backup local executado ainda. O backup local funciona sem destino externo — acesse a central de backup para gerar o primeiro."}
       </div>
     </SettingsSection>
   );
